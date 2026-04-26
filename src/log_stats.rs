@@ -1,4 +1,5 @@
 use std::fs;
+
 use std::collections::HashMap;
 
 // Struct to represent the analysis results of a log file
@@ -26,7 +27,7 @@ impl LogStats {
         if line.contains("ERROR") {
             self.error_count += 1;
             *self.log_level_counts.entry("ERROR".to_string()).or_insert(0) += 1;
-        } else if line.contains("WARNING") {
+        } else if line.contains("WARN")|| line.contains("WARNING"){
             self.warning_count += 1;
             *self.log_level_counts.entry("WARNING".to_string()).or_insert(0) += 1;
         } else if line.contains("INFO") {
