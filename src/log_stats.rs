@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-// Struct to represent the analysis results of a log file
 #[derive(Debug, Clone)]
 pub struct LogStats {
     pub error_count: usize,
@@ -10,9 +9,7 @@ pub struct LogStats {
     pub log_level_counts: HashMap<String, usize>,
 }
 
-// Implementation of LogStats struct to provide methods for processing log lines and updating counts
 impl LogStats {
-    // Constructor to create a new instance of LogStats with initial counts set to zero and an empty HashMap for log level counts
     pub fn new() -> Self {
         LogStats {
             error_count: 0,
@@ -23,9 +20,7 @@ impl LogStats {
         }
     }
 
-    // Method to process a single line of log and update the counts based on the log level (ERROR, WARNING, INFO)
     pub fn process_line(&mut self, line: &str) {
-        // Increment the total line count for each processed line
         self.total_lines += 1;
 
         if line.contains("ERROR") {
@@ -46,7 +41,6 @@ impl LogStats {
         }
     }
 
-    // Method to merge another LogStats instance into the current one by summing up the counts and merging the log level counts
     pub fn merge(&mut self, other: &LogStats) {
         self.error_count += other.error_count;
         self.warning_count += other.warning_count;
