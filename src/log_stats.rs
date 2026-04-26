@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 // Struct to represent the analysis results of a log file
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct LogStats {
     pub error_count: usize,
     pub warning_count: usize,
@@ -30,10 +30,16 @@ impl LogStats {
 
         if line.contains("ERROR") {
             self.error_count += 1;
-            *self.log_level_counts.entry("ERROR".to_string()).or_insert(0) += 1;
-        } else if line.contains("WARN")|| line.contains("WARNING"){
+            *self
+                .log_level_counts
+                .entry("ERROR".to_string())
+                .or_insert(0) += 1;
+        } else if line.contains("WARN") || line.contains("WARNING") {
             self.warning_count += 1;
-            *self.log_level_counts.entry("WARNING".to_string()).or_insert(0) += 1;
+            *self
+                .log_level_counts
+                .entry("WARNING".to_string())
+                .or_insert(0) += 1;
         } else if line.contains("INFO") {
             self.info_count += 1;
             *self.log_level_counts.entry("INFO".to_string()).or_insert(0) += 1;
@@ -53,3 +59,123 @@ impl LogStats {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn count_for(stats: &LogStats, level: &str) -> usize {
+        stats.log_level_counts.get(level).copied().unwrap_or(0)
+    }
+
+    #[test]
+    fn new_starts_with_zero_counts() {
+        let stats = LogStats::new();
+
+        assert_eq!(stats.error_count, 0);
+        assert_eq!(stats.warning_count, 0);
+        assert_eq!(stats.info_count, 0);
+        assert_eq!(stats.total_lines, 0);
+        assert!(stats.log_level_counts.is_empty());
+    }
+
+    #[test]
+    fn process_line_counts_error_logs() {
+        let mut stats = LogStats::new();
+
+        stats.process_line("[2026-04-26] ERROR database connection failed");
+
+        assert_eq!(stats.error_count, 1);
+        assert_eq!(stats.warning_count, 0);
+        assert_eq!(stats.info_count, 0);
+        assert_eq!(stats.total_lines, 1);
+        assert_eq!(count_for(&stats, "ERROR"), 1);
+    }
+
+    #[test]
+    fn process_line_counts_warn_logs_as_warning() {
+        let mut stats = LogStats::new();
+
+        stats.process_line("[2026-04-26] WARN disk usage high");
+
+        assert_eq!(stats.error_count, 0);
+        assert_eq!(stats.warning_count, 1);
+        assert_eq!(stats.info_count, 0);
+        assert_eq!(stats.total_lines, 1);
+        assert_eq!(count_for(&stats, "WARNING"), 1);
+    }
+
+    #[test]
+    fn process_line_counts_warning_logs() {
+        let mut stats = LogStats::new();
+
+        stats.process_line("[2026-04-26] WARNING retry limit almost reached");
+
+        assert_eq!(stats.error_count, 0);
+        assert_eq!(stats.warning_count, 1);
+        assert_eq!(stats.info_count, 0);
+        assert_eq!(stats.total_lines, 1);
+        assert_eq!(count_for(&stats, "WARNING"), 1);
+    }
+
+    #[test]
+    fn process_line_counts_info_logs() {
+        let mut stats = LogStats::new();
+
+        stats.process_line("[2026-04-26] INFO server started");
+
+        assert_eq!(stats.error_count, 0);
+        assert_eq!(stats.warning_count, 0);
+        assert_eq!(stats.info_count, 1);
+        assert_eq!(stats.total_lines, 1);
+        assert_eq!(count_for(&stats, "INFO"), 1);
+    }
+
+    #[test]
+    fn process_line_counts_total_lines_even_for_unknown_logs() {
+        let mut stats = LogStats::new();
+
+        stats.process_line("[2026-04-26] DEBUG cache warmed");
+
+        assert_eq!(stats.error_count, 0);
+        assert_eq!(stats.warning_count, 0);
+        assert_eq!(stats.info_count, 0);
+        assert_eq!(stats.total_lines, 1);
+        assert!(stats.log_level_counts.is_empty());
+    }
+
+    #[test]
+    fn process_line_prioritizes_error_when_line_contains_multiple_levels() {
+        let mut stats = LogStats::new();
+
+        stats.process_line("ERROR while handling INFO message");
+
+        assert_eq!(stats.error_count, 1);
+        assert_eq!(stats.warning_count, 0);
+        assert_eq!(stats.info_count, 0);
+        assert_eq!(stats.total_lines, 1);
+        assert_eq!(count_for(&stats, "ERROR"), 1);
+        assert_eq!(count_for(&stats, "INFO"), 0);
+    }
+
+    #[test]
+    fn merge_combines_all_counts_and_levels() {
+        let mut first = LogStats::new();
+        first.process_line("ERROR first failure");
+        first.process_line("INFO first startup");
+
+        let mut second = LogStats::new();
+        second.process_line("WARNING second warning");
+        second.process_line("INFO second startup");
+        second.process_line("DEBUG second debug");
+
+        first.merge(&second);
+
+        assert_eq!(first.error_count, 1);
+        assert_eq!(first.warning_count, 1);
+        assert_eq!(first.info_count, 2);
+        assert_eq!(first.total_lines, 5);
+        assert_eq!(count_for(&first, "ERROR"), 1);
+        assert_eq!(count_for(&first, "WARNING"), 1);
+        assert_eq!(count_for(&first, "INFO"), 2);
+    }
+}

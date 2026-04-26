@@ -1,11 +1,11 @@
+use num_cpus;
 use std::fs;
 use std::time::Instant;
-use num_cpus;
 
 mod log_stats;
 mod processor;
 
-fn main(){
+fn main() {
     // Start measuring the time taken for the log processing
     let start = Instant::now();
 
@@ -33,5 +33,5 @@ fn main(){
     println!("INFO count: {}", stats.info_count);
     println!("Log level counts: {:?}", stats.log_level_counts);
     println!("Total lines processed: {}", stats.total_lines);
-    println!("\nExecution time: {:#?}", elapsed);  // Formatted output
+    println!("\nExecution time: {:#?}", elapsed); // Formatted output
 }

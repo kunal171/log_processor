@@ -1,16 +1,15 @@
-use std::thread;    
 use crate::log_stats::LogStats;
+use std::thread;
 
 pub fn process_logs_multithreaded(lines: Vec<String>, thread_count: usize) -> LogStats {
-
     if lines.is_empty() {
         return LogStats::new();
     }
 
     let chunk_size = (lines.len() + thread_count - 1) / thread_count; // Calculate chunk size for each thread
-    // println!("Chunk size for each thread: {}", chunk_size);
-    // println!("Spawning threads to process log lines...");
-    // println!("Starting log processing...");
+                                                                      // println!("Chunk size for each thread: {}", chunk_size);
+                                                                      // println!("Spawning threads to process log lines...");
+                                                                      // println!("Starting log processing...");
 
     let mut handles = Vec::new();
 
@@ -44,4 +43,85 @@ pub fn process_logs_multithreaded(lines: Vec<String>, thread_count: usize) -> Lo
         final_stats.merge(&local_stats);
     }
     final_stats
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn lines(values: &[&str]) -> Vec<String> {
+        values.iter().map(|line| line.to_string()).collect()
+    }
+
+    fn count_for(stats: &LogStats, level: &str) -> usize {
+        stats.log_level_counts.get(level).copied().unwrap_or(0)
+    }
+
+    #[test]
+    fn returns_empty_stats_for_empty_input() {
+        let stats = process_logs_multithreaded(Vec::new(), 4);
+
+        assert_eq!(stats.error_count, 0);
+        assert_eq!(stats.warning_count, 0);
+        assert_eq!(stats.info_count, 0);
+        assert_eq!(stats.total_lines, 0);
+        assert!(stats.log_level_counts.is_empty());
+    }
+
+    #[test]
+    fn processes_logs_across_multiple_threads() {
+        let input = lines(&[
+            "INFO server started",
+            "ERROR database unavailable",
+            "WARN disk almost full",
+            "DEBUG cache warmed",
+            "WARNING retry threshold reached",
+            "INFO request completed",
+        ]);
+
+        let stats = process_logs_multithreaded(input, 3);
+
+        assert_eq!(stats.error_count, 1);
+        assert_eq!(stats.warning_count, 2);
+        assert_eq!(stats.info_count, 2);
+        assert_eq!(stats.total_lines, 6);
+        assert_eq!(count_for(&stats, "ERROR"), 1);
+        assert_eq!(count_for(&stats, "WARNING"), 2);
+        assert_eq!(count_for(&stats, "INFO"), 2);
+    }
+
+    #[test]
+    fn handles_more_threads_than_lines() {
+        let input = lines(&["ERROR one", "INFO two"]);
+
+        let stats = process_logs_multithreaded(input, 8);
+
+        assert_eq!(stats.error_count, 1);
+        assert_eq!(stats.warning_count, 0);
+        assert_eq!(stats.info_count, 1);
+        assert_eq!(stats.total_lines, 2);
+        assert_eq!(count_for(&stats, "ERROR"), 1);
+        assert_eq!(count_for(&stats, "INFO"), 1);
+    }
+
+    #[test]
+    fn produces_same_result_with_one_thread() {
+        let input = lines(&[
+            "ERROR one",
+            "ERROR two",
+            "WARN three",
+            "INFO four",
+            "TRACE five",
+        ]);
+
+        let stats = process_logs_multithreaded(input, 1);
+
+        assert_eq!(stats.error_count, 2);
+        assert_eq!(stats.warning_count, 1);
+        assert_eq!(stats.info_count, 1);
+        assert_eq!(stats.total_lines, 5);
+        assert_eq!(count_for(&stats, "ERROR"), 2);
+        assert_eq!(count_for(&stats, "WARNING"), 1);
+        assert_eq!(count_for(&stats, "INFO"), 1);
+    }
 }
