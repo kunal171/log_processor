@@ -2,31 +2,28 @@ use std::fs;
 use std::time::Instant;
 
 mod log_stats;
-use log_stats::LogStats;
+mod processor;
 
-fn main(){
-    // Start measuring the time taken for the log processing
+fn main() {
     let start = Instant::now();
-
-    // Read the log file content into a string
     let logs = fs::read_to_string("logs.txt").expect("Failed to read log file");
+    let thread_count = num_cpus::get();
+    let lines: Vec<String> = logs.lines().map(|line| line.to_string()).collect();
 
-    // Create a new instance of LogStats to hold the analysis results
-    let mut stats = LogStats::new();
+    println!(
+        "Processing {} log lines with {} workers",
+        lines.len(),
+        thread_count
+    );
 
-    // Process each line of the log file and update the counts in LogStats
-    for line in logs.lines() {
-        stats.process_line(line);
-    }
-
-    // End timing
+    let stats = processor::process_logs_multithreaded(lines, thread_count);
     let elapsed = start.elapsed();
 
-    // Print the analysis results
     println!("Log Analysis:");
+    println!("Total lines processed: {}", stats.total_lines);
     println!("ERROR count: {}", stats.error_count);
     println!("WARNING count: {}", stats.warning_count);
     println!("INFO count: {}", stats.info_count);
     println!("Log level counts: {:?}", stats.log_level_counts);
-    println!("\nExecution time: {:#?}", elapsed);  // Formatted output
+    println!("Execution time: {elapsed:#?}");
 }
