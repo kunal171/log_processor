@@ -28,5 +28,5 @@ fn main(){
     println!("WARNING count: {}", stats.warning_count);
     println!("INFO count: {}", stats.info_count);
     println!("Log level counts: {:?}", stats.log_level_counts);
-    println!("\nExecution time: {:.2?}", elapsed);  // Formatted output
+    println!("\nExecution time: {:#?}", elapsed);  // Formatted output
 }
