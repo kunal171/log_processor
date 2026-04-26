@@ -3,24 +3,25 @@ use std::time::Instant;
 use num_cpus;
 
 mod log_stats;
-use log_stats::LogStats;
+mod processor;
 
 fn main(){
-    println!("Thread count: {}", num_cpus::get());
-    println!("Current thread: {:?}", std::thread::current().id());
     // Start measuring the time taken for the log processing
     let start = Instant::now();
 
     // Read the log file content into a string
     let logs = fs::read_to_string("logs.txt").expect("Failed to read log file");
 
-    // Create a new instance of LogStats to hold the analysis results
-    let mut stats = LogStats::new();
+    // Get the number of CPU cores available to determine how many threads to spawn for processing
+    let thread_count = num_cpus::get();
+    println!("Processing logs with {} threads...", thread_count);
+
+    // Split the log content into lines and collect them into a vector for processing
+    let lines: Vec<String> = logs.lines().map(|line| line.to_string()).collect();
+    println!("Total lines to process: {}", lines.len());
 
     // Process each line of the log file and update the counts in LogStats
-    for line in logs.lines() {
-        stats.process_line(line);
-    }
+    let stats = processor::process_logs_multithreaded(lines, thread_count);
 
     // End timing
     let elapsed = start.elapsed();
@@ -31,5 +32,6 @@ fn main(){
     println!("WARNING count: {}", stats.warning_count);
     println!("INFO count: {}", stats.info_count);
     println!("Log level counts: {:?}", stats.log_level_counts);
+    println!("Total lines processed: {}", stats.total_lines);
     println!("\nExecution time: {:#?}", elapsed);  // Formatted output
 }
