@@ -1,10 +1,13 @@
 use std::fs;
 use std::time::Instant;
+use num_cpus;
 
 mod log_stats;
 use log_stats::LogStats;
 
 fn main(){
+    println!("Thread count: {}", num_cpus::get());
+    println!("Current thread: {:?}", std::thread::current().id());
     // Start measuring the time taken for the log processing
     let start = Instant::now();
 

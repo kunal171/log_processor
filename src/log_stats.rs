@@ -1,12 +1,12 @@
-use std::fs;
-
 use std::collections::HashMap;
 
 // Struct to represent the analysis results of a log file
+#[derive(Debug,Clone)]
 pub struct LogStats {
     pub error_count: usize,
     pub warning_count: usize,
     pub info_count: usize,
+    pub total_lines: usize,
     pub log_level_counts: HashMap<String, usize>,
 }
 
@@ -18,12 +18,16 @@ impl LogStats {
             error_count: 0,
             warning_count: 0,
             info_count: 0,
+            total_lines: 0,
             log_level_counts: HashMap::new(),
         }
     }
 
     // Method to process a single line of log and update the counts based on the log level (ERROR, WARNING, INFO)
     pub fn process_line(&mut self, line: &str) {
+        // Increment the total line count for each processed line
+        self.total_lines += 1;
+
         if line.contains("ERROR") {
             self.error_count += 1;
             *self.log_level_counts.entry("ERROR".to_string()).or_insert(0) += 1;
@@ -35,4 +39,17 @@ impl LogStats {
             *self.log_level_counts.entry("INFO".to_string()).or_insert(0) += 1;
         }
     }
+
+    // Method to merge another LogStats instance into the current one by summing up the counts and merging the log level counts
+    pub fn merge(&mut self, other: &LogStats) {
+        self.error_count += other.error_count;
+        self.warning_count += other.warning_count;
+        self.info_count += other.info_count;
+        self.total_lines += other.total_lines;
+
+        for (level, count) in &other.log_level_counts {
+            *self.log_level_counts.entry(level.clone()).or_insert(0) += count;
+        }
+    }
 }
+
