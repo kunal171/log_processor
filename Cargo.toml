@@ -1,0 +1,8 @@
+[package]
+name = "multi-threaded-log-processor"
+version = "0.1.0"
+description = "A multi-threaded log processor for analyzing large log files efficiently."
+authors = ["kunal171"]
+edition = "2021"
+
+[dependencies]
