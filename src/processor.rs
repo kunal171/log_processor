@@ -2,7 +2,7 @@ use crate::log_stats::LogStats;
 use std::sync::mpsc;
 use std::thread;
 
-pub fn process_logs_multithreaded(lines: Vec<String>, thread_count: usize) -> LogStats {
+pub fn process_logs_multithreaded(lines: &[String], thread_count: usize) -> LogStats {
     if lines.is_empty() {
         return LogStats::new();
     }
@@ -11,29 +11,27 @@ pub fn process_logs_multithreaded(lines: Vec<String>, thread_count: usize) -> Lo
     let chunk_size = lines.len().div_ceil(thread_count);
     let (tx, rx) = mpsc::channel();
     
-    let mut handles = Vec::new();
+    // let mut handles = Vec::new();
 
     // Spawn worker threads to process chunks of log lines
-    for chunks in lines.chunks(chunk_size) {
-        let chunk = chunks.to_vec();
-        let tx = tx.clone();
+    
+    thread::scope(|scope| {
+        for chunk in lines.chunks(chunk_size) {
+            let tx = tx.clone();
 
-        // Each worker thread processes its chunk of lines and sends the local stats back to the main thread
-        let handle= thread::spawn(move || {
-            let mut local_stats = LogStats::new();
+            scope.spawn(move || {
+                let mut local_stats = LogStats::new();
 
-            for line in chunk {
-                local_stats.process_line(&line);
-            }
+                for line in chunk {
+                    local_stats.process_line(line);
+                }
 
-            tx.send(local_stats).expect("Failed to send stats");
-        });
+                tx.send(local_stats).expect("Failed to send stats");
+            });
+        }
 
-        handles.push(handle);
-    }
-
-    // Close the main sender so the receiver loop ends after all worker senders are dropped.
-    drop(tx);
+        drop(tx);
+    });
 
     let mut final_stats = LogStats::new();
 
@@ -41,10 +39,10 @@ pub fn process_logs_multithreaded(lines: Vec<String>, thread_count: usize) -> Lo
         final_stats.merge(&local_stats);
     }
 
-    // Wait for all worker threads to finish
-    for handle in handles {
-        handle.join().expect("Worker thread panicked");
-    }
+    // // Wait for all worker threads to finish
+    // for handle in handles {
+    //     handle.join().expect("Worker thread panicked");
+    // }
 
     final_stats
 }

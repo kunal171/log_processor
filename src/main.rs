@@ -30,7 +30,7 @@ fn main() {
         thread_count
     );
 
-    let stats = processor::process_logs_multithreaded(lines, thread_count);
+    let stats = processor::process_logs_multithreaded(&lines, thread_count);
     let elapsed = start.elapsed();
 
     println!("Multi Threaded Log Analysis:");
