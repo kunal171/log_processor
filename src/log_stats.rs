@@ -23,21 +23,28 @@ impl LogStats {
     pub fn process_line(&mut self, line: &str) {
         self.total_lines += 1;
 
-        if line.contains("ERROR") {
-            self.error_count += 1;
-            *self
-                .log_level_counts
-                .entry("ERROR".to_string())
-                .or_insert(0) += 1;
-        } else if line.contains("WARN") || line.contains("WARNING") {
-            self.warning_count += 1;
-            *self
-                .log_level_counts
-                .entry("WARNING".to_string())
-                .or_insert(0) += 1;
-        } else if line.contains("INFO") {
-            self.info_count += 1;
-            *self.log_level_counts.entry("INFO".to_string()).or_insert(0) += 1;
+        let level = line.split_whitespace().next();
+
+        match level {
+            Some("ERROR") => {
+                self.error_count += 1;
+                *self
+                    .log_level_counts
+                    .entry("ERROR".to_string())
+                    .or_insert(0) += 1;
+            }
+            Some("WARN") | Some("WARNING") => {
+                self.warning_count += 1;
+                *self
+                    .log_level_counts
+                    .entry("WARNING".to_string())
+                    .or_insert(0) += 1;
+            }
+            Some("INFO") => {
+                self.info_count += 1;
+                *self.log_level_counts.entry("INFO".to_string()).or_insert(0) += 1;
+            }
+            _ => {}
         }
     }
 
@@ -76,7 +83,7 @@ mod tests {
     fn process_line_counts_error_logs() {
         let mut stats = LogStats::new();
 
-        stats.process_line("[2026-04-26] ERROR database connection failed");
+        stats.process_line("ERROR database connection failed");
 
         assert_eq!(stats.error_count, 1);
         assert_eq!(stats.warning_count, 0);
@@ -89,7 +96,7 @@ mod tests {
     fn process_line_counts_warn_logs_as_warning() {
         let mut stats = LogStats::new();
 
-        stats.process_line("[2026-04-26] WARN disk usage high");
+        stats.process_line("WARN disk usage high");
 
         assert_eq!(stats.error_count, 0);
         assert_eq!(stats.warning_count, 1);
@@ -102,7 +109,7 @@ mod tests {
     fn process_line_counts_warning_logs() {
         let mut stats = LogStats::new();
 
-        stats.process_line("[2026-04-26] WARNING retry limit almost reached");
+        stats.process_line("WARNING retry limit almost reached");
 
         assert_eq!(stats.error_count, 0);
         assert_eq!(stats.warning_count, 1);
@@ -115,7 +122,7 @@ mod tests {
     fn process_line_counts_info_logs() {
         let mut stats = LogStats::new();
 
-        stats.process_line("[2026-04-26] INFO server started");
+        stats.process_line("INFO server started");
 
         assert_eq!(stats.error_count, 0);
         assert_eq!(stats.warning_count, 0);

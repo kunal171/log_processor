@@ -2,7 +2,7 @@ use crate::log_stats::LogStats;
 use std::sync::mpsc;
 use std::thread;
 
-pub fn process_logs_multithreaded(lines: Vec<String>, thread_count: usize) -> LogStats {
+pub fn process_logs_multithreaded(lines: &[String], thread_count: usize) -> LogStats {
     if lines.is_empty() {
         return LogStats::new();
     }
@@ -10,30 +10,28 @@ pub fn process_logs_multithreaded(lines: Vec<String>, thread_count: usize) -> Lo
     let thread_count = thread_count.max(1);
     let chunk_size = lines.len().div_ceil(thread_count);
     let (tx, rx) = mpsc::channel();
-    
-    let mut handles = Vec::new();
+
+    // let mut handles = Vec::new();
 
     // Spawn worker threads to process chunks of log lines
-    for chunks in lines.chunks(chunk_size) {
-        let chunk = chunks.to_vec();
-        let tx = tx.clone();
 
-        // Each worker thread processes its chunk of lines and sends the local stats back to the main thread
-        let handle= thread::spawn(move || {
-            let mut local_stats = LogStats::new();
+    thread::scope(|scope| {
+        for chunk in lines.chunks(chunk_size) {
+            let tx = tx.clone();
 
-            for line in chunk {
-                local_stats.process_line(&line);
-            }
+            scope.spawn(move || {
+                let mut local_stats = LogStats::new();
 
-            tx.send(local_stats).expect("Failed to send stats");
-        });
+                for line in chunk {
+                    local_stats.process_line(line);
+                }
 
-        handles.push(handle);
-    }
+                tx.send(local_stats).expect("Failed to send stats");
+            });
+        }
 
-    // Close the main sender so the receiver loop ends after all worker senders are dropped.
-    drop(tx);
+        drop(tx);
+    });
 
     let mut final_stats = LogStats::new();
 
@@ -41,10 +39,10 @@ pub fn process_logs_multithreaded(lines: Vec<String>, thread_count: usize) -> Lo
         final_stats.merge(&local_stats);
     }
 
-    // Wait for all worker threads to finish
-    for handle in handles {
-        handle.join().expect("Worker thread panicked");
-    }
+    // // Wait for all worker threads to finish
+    // for handle in handles {
+    //     handle.join().expect("Worker thread panicked");
+    // }
 
     final_stats
 }
@@ -74,7 +72,7 @@ mod tests {
 
     #[test]
     fn returns_empty_stats_for_empty_input() {
-        let stats = process_logs_multithreaded(Vec::new(), 4);
+        let stats = process_logs_multithreaded(&[], 4);
 
         assert_eq!(stats.error_count, 0);
         assert_eq!(stats.warning_count, 0);
@@ -94,7 +92,7 @@ mod tests {
             "INFO request completed",
         ]);
 
-        let stats = process_logs_multithreaded(input, 3);
+        let stats = process_logs_multithreaded(&input, 3);
 
         assert_eq!(stats.error_count, 1);
         assert_eq!(stats.warning_count, 2);
@@ -109,7 +107,7 @@ mod tests {
     fn handles_more_threads_than_lines() {
         let input = lines(&["ERROR one", "INFO two"]);
 
-        let stats = process_logs_multithreaded(input, 8);
+        let stats = process_logs_multithreaded(&input, 8);
 
         assert_eq!(stats.error_count, 1);
         assert_eq!(stats.warning_count, 0);
@@ -129,7 +127,7 @@ mod tests {
             "TRACE five",
         ]);
 
-        let stats = process_logs_multithreaded(input, 1);
+        let stats = process_logs_multithreaded(&input, 1);
 
         assert_eq!(stats.error_count, 2);
         assert_eq!(stats.warning_count, 1);
@@ -144,7 +142,7 @@ mod tests {
     fn treats_zero_threads_as_one_thread() {
         let input = lines(&["ERROR one", "WARN two", "INFO three"]);
 
-        let stats = process_logs_multithreaded(input, 0);
+        let stats = process_logs_multithreaded(&input, 0);
 
         assert_eq!(stats.error_count, 1);
         assert_eq!(stats.warning_count, 1);
