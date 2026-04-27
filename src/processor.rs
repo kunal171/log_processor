@@ -49,6 +49,17 @@ pub fn process_logs_multithreaded(lines: Vec<String>, thread_count: usize) -> Lo
     final_stats
 }
 
+// A single-threaded version of the log processing for comparison and testing purposes
+pub fn process_logs_singlethreaded(lines: &[String]) -> LogStats {
+    let mut stats = LogStats::new();
+
+    for line in lines {
+        stats.process_line(line);
+    }
+
+    stats
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
