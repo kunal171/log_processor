@@ -10,13 +10,16 @@ pub fn process_logs_multithreaded(lines: Vec<String>, thread_count: usize) -> Lo
     let thread_count = thread_count.max(1);
     let chunk_size = lines.len().div_ceil(thread_count);
     let (tx, rx) = mpsc::channel();
+    
+    let mut handles = Vec::new();
 
     // Spawn worker threads to process chunks of log lines
     for chunks in lines.chunks(chunk_size) {
         let chunk = chunks.to_vec();
         let tx = tx.clone();
 
-        thread::spawn(move || {
+        // Each worker thread processes its chunk of lines and sends the local stats back to the main thread
+        let handle= thread::spawn(move || {
             let mut local_stats = LogStats::new();
 
             for line in chunk {
@@ -25,6 +28,8 @@ pub fn process_logs_multithreaded(lines: Vec<String>, thread_count: usize) -> Lo
 
             tx.send(local_stats).expect("Failed to send stats");
         });
+
+        handles.push(handle);
     }
 
     // Close the main sender so the receiver loop ends after all worker senders are dropped.
@@ -34,6 +39,11 @@ pub fn process_logs_multithreaded(lines: Vec<String>, thread_count: usize) -> Lo
 
     for local_stats in rx {
         final_stats.merge(&local_stats);
+    }
+
+    // Wait for all worker threads to finish
+    for handle in handles {
+        handle.join().expect("Worker thread panicked");
     }
 
     final_stats
