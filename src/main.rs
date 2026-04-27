@@ -23,7 +23,6 @@ fn main() {
     // Process logs using multiple threads
     let start = Instant::now();
 
-
     println!(
         "Processing {} log lines with {} workers",
         lines.len(),

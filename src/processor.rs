@@ -10,11 +10,11 @@ pub fn process_logs_multithreaded(lines: &[String], thread_count: usize) -> LogS
     let thread_count = thread_count.max(1);
     let chunk_size = lines.len().div_ceil(thread_count);
     let (tx, rx) = mpsc::channel();
-    
+
     // let mut handles = Vec::new();
 
     // Spawn worker threads to process chunks of log lines
-    
+
     thread::scope(|scope| {
         for chunk in lines.chunks(chunk_size) {
             let tx = tx.clone();
@@ -72,7 +72,7 @@ mod tests {
 
     #[test]
     fn returns_empty_stats_for_empty_input() {
-        let stats = process_logs_multithreaded(Vec::new(), 4);
+        let stats = process_logs_multithreaded(&[], 4);
 
         assert_eq!(stats.error_count, 0);
         assert_eq!(stats.warning_count, 0);
@@ -92,7 +92,7 @@ mod tests {
             "INFO request completed",
         ]);
 
-        let stats = process_logs_multithreaded(input, 3);
+        let stats = process_logs_multithreaded(&input, 3);
 
         assert_eq!(stats.error_count, 1);
         assert_eq!(stats.warning_count, 2);
@@ -107,7 +107,7 @@ mod tests {
     fn handles_more_threads_than_lines() {
         let input = lines(&["ERROR one", "INFO two"]);
 
-        let stats = process_logs_multithreaded(input, 8);
+        let stats = process_logs_multithreaded(&input, 8);
 
         assert_eq!(stats.error_count, 1);
         assert_eq!(stats.warning_count, 0);
@@ -127,7 +127,7 @@ mod tests {
             "TRACE five",
         ]);
 
-        let stats = process_logs_multithreaded(input, 1);
+        let stats = process_logs_multithreaded(&input, 1);
 
         assert_eq!(stats.error_count, 2);
         assert_eq!(stats.warning_count, 1);
@@ -142,7 +142,7 @@ mod tests {
     fn treats_zero_threads_as_one_thread() {
         let input = lines(&["ERROR one", "WARN two", "INFO three"]);
 
-        let stats = process_logs_multithreaded(input, 0);
+        let stats = process_logs_multithreaded(&input, 0);
 
         assert_eq!(stats.error_count, 1);
         assert_eq!(stats.warning_count, 1);
