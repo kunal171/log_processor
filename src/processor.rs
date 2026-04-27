@@ -11,6 +11,7 @@ pub fn process_logs_multithreaded(lines: Vec<String>, thread_count: usize) -> Lo
     let chunk_size = lines.len().div_ceil(thread_count);
     let (tx, rx) = mpsc::channel();
 
+    // Spawn worker threads to process chunks of log lines
     for chunks in lines.chunks(chunk_size) {
         let chunk = chunks.to_vec();
         let tx = tx.clone();
