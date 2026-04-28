@@ -8,9 +8,10 @@ fn main() {
     // Read log file and prepare lines for processing
     let logs = fs::read_to_string("logs.txt").expect("Failed to read log file");
     let thread_count = num_cpus::get();
+    let single_start = Instant::now();
     let lines: Vec<String> = logs.lines().map(|line| line.to_string()).collect();
     // Read log file and prepare lines for processing
-    let single_start = Instant::now();
+
     // Process logs using single-threaded approach for comparison
     let single_stats = processor::process_logs_singlethreaded(&lines);
     let single_elapsed = single_start.elapsed();
