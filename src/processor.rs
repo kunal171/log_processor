@@ -1,6 +1,8 @@
 use crate::log_stats::LogStats;
-use std::sync::mpsc;
+use std::{os::linux::raw::stat, sync::mpsc};
 use std::thread;
+use std::fs::File;
+use::std::io::{self, BufRead, BufReader};
 
 pub fn process_logs_multithreaded(lines: &[String], thread_count: usize) -> LogStats {
     if lines.is_empty() {
@@ -56,6 +58,30 @@ pub fn process_logs_singlethreaded(lines: &[String]) -> LogStats {
     }
 
     stats
+}
+
+// A streaming version of the log processing that reads the log file line by line without loading the entire file into memory
+pub fn process_log_file_streaming(file_path: &str) -> io::Result<LogStats> {
+    let file = File::open(file_path)?;
+    let mut reader = BufReader::new(file);
+
+    let mut stats = LogStats::new();
+    let mut line = String::new();
+
+    loop {
+        line.clear();
+
+        let bytes_read = reader.read_line(&mut line)?;
+
+        if bytes_read == 0 {
+            break;
+        }
+
+        stats.process_line(line.trim_end());
+    }
+
+    Ok(stats)
+
 }
 
 #[cfg(test)]
