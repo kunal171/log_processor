@@ -1,8 +1,8 @@
 use crate::log_stats::LogStats;
-use std::{os::linux::raw::stat, sync::mpsc};
-use std::thread;
 use std::fs::File;
-use::std::io::{self, BufRead, BufReader};
+use std::io::{self, BufRead, BufReader};
+use std::sync::mpsc;
+use std::thread;
 
 pub fn process_logs_multithreaded(lines: &[String], thread_count: usize) -> LogStats {
     if lines.is_empty() {
@@ -60,8 +60,25 @@ pub fn process_logs_singlethreaded(lines: &[String]) -> LogStats {
     stats
 }
 
-// A streaming version of the log processing that reads the log file line by line without loading the entire file into memory
-pub fn process_log_file_streaming(file_path: &str) -> io::Result<LogStats> {
+// A simple streaming version that reads the file line by line.
+// This is easy to read, but reader.lines() allocates a new String per line.
+pub fn process_log_file_streaming_lines(file_path: &str) -> io::Result<LogStats> {
+    let file = File::open(file_path)?;
+    let reader = BufReader::new(file);
+
+    let mut stats = LogStats::new();
+
+    for line_result in reader.lines() {
+        let line = line_result?;
+        stats.process_line(&line);
+    }
+
+    Ok(stats)
+}
+
+// A streaming version that reuses one String buffer for all lines.
+// This avoids allocating a fresh String for every line.
+pub fn process_log_file_streaming_reuse_buffer(file_path: &str) -> io::Result<LogStats> {
     let file = File::open(file_path)?;
     let mut reader = BufReader::new(file);
 
@@ -81,7 +98,6 @@ pub fn process_log_file_streaming(file_path: &str) -> io::Result<LogStats> {
     }
 
     Ok(stats)
-
 }
 
 #[cfg(test)]

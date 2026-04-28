@@ -5,55 +5,92 @@ mod log_stats;
 mod processor;
 
 fn main() {
-    // Read log file and prepare lines for processing
-    let logs = fs::read_to_string("logs.txt").expect("Failed to read log file");
+    let file_path = "logs.txt";
     let thread_count = num_cpus::get();
-    let single_start = Instant::now();
-    let lines: Vec<String> = logs.lines().map(|line| line.to_string()).collect();
-    // Read log file and prepare lines for processing
 
-    // Process logs using single-threaded approach for comparison
+    let load_start = Instant::now();
+    let logs = fs::read_to_string(file_path).expect("Failed to read log file");
+    let lines: Vec<String> = logs.lines().map(|line| line.to_string()).collect();
+    let load_elapsed = load_start.elapsed();
+
+    let single_start = Instant::now();
     let single_stats = processor::process_logs_singlethreaded(&lines);
     let single_elapsed = single_start.elapsed();
+    let single_total_elapsed = load_elapsed + single_elapsed;
 
-    println!("Single-threaded:");
+    println!("Read + Collect:");
+    println!("Log lines loaded: {}", lines.len());
+    println!("Execution time: {load_elapsed:#?}");
+    println!();
+
+    println!("Single-threaded Process Only:");
     println!("Total lines processed: {}", single_stats.total_lines);
     println!("ERROR count: {}", single_stats.error_count);
     println!("WARNING count: {}", single_stats.warning_count);
     println!("INFO count: {}", single_stats.info_count);
     println!("Execution time: {single_elapsed:#?}");
+    println!();
 
-    // Process logs using multiple threads
-    let start = Instant::now();
+    println!("Read + Collect + Single-threaded Process:");
+    println!("Total lines processed: {}", single_stats.total_lines);
+    println!("Execution time: {single_total_elapsed:#?}");
+    println!();
+
+    let multi_start = Instant::now();
+    let multi_stats = processor::process_logs_multithreaded(&lines, thread_count);
+    let multi_elapsed = multi_start.elapsed();
+    let multi_total_elapsed = load_elapsed + multi_elapsed;
 
     println!(
-        "Processing {} log lines with {} workers",
-        lines.len(),
-        thread_count
+        "Processing {} log lines with {thread_count} workers",
+        lines.len()
     );
-
-    let stats = processor::process_logs_multithreaded(&lines, thread_count);
-    let elapsed = start.elapsed();
-
     println!("Multi Threaded Log Analysis:");
-    println!("Total lines processed: {}", stats.total_lines);
-    println!("ERROR count: {}", stats.error_count);
-    println!("WARNING count: {}", stats.warning_count);
-    println!("INFO count: {}", stats.info_count);
-    println!("Log level counts: {:?}", stats.log_level_counts);
-    println!("Execution time: {elapsed:#?}");
+    println!("Total lines processed: {}", multi_stats.total_lines);
+    println!("ERROR count: {}", multi_stats.error_count);
+    println!("WARNING count: {}", multi_stats.warning_count);
+    println!("INFO count: {}", multi_stats.info_count);
+    println!("Log level counts: {:?}", multi_stats.log_level_counts);
+    println!("Process-only execution time: {multi_elapsed:#?}");
+    println!("Read + Collect + Multi-threaded Process: {multi_total_elapsed:#?}");
+    println!();
 
+    let streaming_lines_start = Instant::now();
+    let streaming_lines_stats = processor::process_log_file_streaming_lines(file_path)
+        .expect("Failed to process log file with BufReader lines");
+    let streaming_lines_elapsed = streaming_lines_start.elapsed();
 
-    // Process logs using streaming approach
-    let streaming_start = Instant::now();
-    let streaming_stats = processor::process_log_file_streaming("logs.txt").expect("Failed to process log file in streaming mode");
-    let streaming_elapsed = streaming_start.elapsed();
+    println!("Streaming Log Analysis With BufReader::lines:");
+    println!(
+        "Total lines processed: {}",
+        streaming_lines_stats.total_lines
+    );
+    println!("ERROR count: {}", streaming_lines_stats.error_count);
+    println!("WARNING count: {}", streaming_lines_stats.warning_count);
+    println!("INFO count: {}", streaming_lines_stats.info_count);
+    println!(
+        "Log level counts: {:?}",
+        streaming_lines_stats.log_level_counts
+    );
+    println!("Execution time: {streaming_lines_elapsed:#?}");
+    println!();
 
-    println!("Streaming Log Analysis:");
-    println!("Total lines processed: {}", streaming_stats.total_lines);
-    println!("ERROR count: {}", streaming_stats.error_count);
-    println!("WARNING count: {}", streaming_stats.warning_count);
-    println!("INFO count: {}", streaming_stats.info_count);
-    println!("Log level counts: {:?}", streaming_stats.log_level_counts);
-    println!("Execution time: {streaming_elapsed:#?}");
+    let streaming_reuse_start = Instant::now();
+    let streaming_reuse_stats = processor::process_log_file_streaming_reuse_buffer(file_path)
+        .expect("Failed to process log file with reusable streaming buffer");
+    let streaming_reuse_elapsed = streaming_reuse_start.elapsed();
+
+    println!("Streaming Log Analysis With Reusable Buffer:");
+    println!(
+        "Total lines processed: {}",
+        streaming_reuse_stats.total_lines
+    );
+    println!("ERROR count: {}", streaming_reuse_stats.error_count);
+    println!("WARNING count: {}", streaming_reuse_stats.warning_count);
+    println!("INFO count: {}", streaming_reuse_stats.info_count);
+    println!(
+        "Log level counts: {:?}",
+        streaming_reuse_stats.log_level_counts
+    );
+    println!("Execution time: {streaming_reuse_elapsed:#?}");
 }
