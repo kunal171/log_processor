@@ -3,6 +3,7 @@ use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use std::sync::mpsc;
 use std::thread;
+use std::sync::{Arc, Mutex};
 
 pub fn process_logs_multithreaded(lines: &[String], thread_count: usize) -> LogStats {
     if lines.is_empty() {
@@ -98,6 +99,37 @@ pub fn process_log_file_streaming_reuse_buffer(file_path: &str) -> io::Result<Lo
     }
 
     Ok(stats)
+}
+
+pub fn process_logs_with_shared_mutex (lines: &[String], thread_count: usize) -> LogStats {
+
+    if lines.is_empty() {
+        return LogStats::new();
+    }
+
+    let thread_count = thread_count.max(1);
+    let chunk_size = lines.len().div_ceil(thread_count);
+    let shared_stats = Arc::new(Mutex::new(LogStats::new()));
+
+    thread::scope(|scope| {
+        for chunk in lines.chunks(chunk_size) {
+            let shared_stats = Arc::clone(&shared_stats);
+
+            scope.spawn(move || {
+                let mut local_stats = LogStats::new();
+
+                for line in chunk {
+                    local_stats.process_line(line);
+                }
+
+                let mut stats = shared_stats.lock().expect("Failed to lock mutex");
+                stats.merge(&local_stats);
+            });
+        }
+    });
+
+    let stats = shared_stats.lock().expect("Mutex poisoned");
+    stats.clone()
 }
 
 #[cfg(test)]

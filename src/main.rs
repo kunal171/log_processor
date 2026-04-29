@@ -55,6 +55,21 @@ fn main() {
     println!("Read + Collect + Multi-threaded Process: {multi_total_elapsed:#?}");
     println!();
 
+    let mutex_start = Instant::now();
+    let mutex_stats = processor::process_logs_with_shared_mutex(&lines, thread_count);
+    let mutex_elapsed = mutex_start.elapsed();
+    let mutex_total_elapsed = load_elapsed + mutex_elapsed;
+
+    println!("Shared Mutex Log Analysis:");
+    println!("Total lines processed: {}", mutex_stats.total_lines);
+    println!("ERROR count: {}", mutex_stats.error_count);
+    println!("WARNING count: {}", mutex_stats.warning_count);
+    println!("INFO count: {}", mutex_stats.info_count);
+    println!("Log level counts: {:?}", mutex_stats.log_level_counts);
+    println!("Process-only execution time: {mutex_elapsed:#?}");
+    println!("Read + Collect + Shared Mutex Process: {mutex_total_elapsed:#?}");
+    println!();
+
     let streaming_lines_start = Instant::now();
     let streaming_lines_stats = processor::process_log_file_streaming_lines(file_path)
         .expect("Failed to process log file with BufReader lines");
