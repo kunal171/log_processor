@@ -1,8 +1,9 @@
 use crate::log_stats::LogStats;
-use std::{os::linux::raw::stat, sync::mpsc};
-use std::thread;
 use std::fs::File;
-use::std::io::{self, BufRead, BufReader};
+use std::io::{self, BufRead, BufReader};
+use std::sync::mpsc;
+use std::thread;
+use std::sync::{Arc, Mutex};
 
 pub fn process_logs_multithreaded(lines: &[String], thread_count: usize) -> LogStats {
     if lines.is_empty() {
@@ -60,8 +61,25 @@ pub fn process_logs_singlethreaded(lines: &[String]) -> LogStats {
     stats
 }
 
-// A streaming version of the log processing that reads the log file line by line without loading the entire file into memory
-pub fn process_log_file_streaming(file_path: &str) -> io::Result<LogStats> {
+// A simple streaming version that reads the file line by line.
+// This is easy to read, but reader.lines() allocates a new String per line.
+pub fn process_log_file_streaming_lines(file_path: &str) -> io::Result<LogStats> {
+    let file = File::open(file_path)?;
+    let reader = BufReader::new(file);
+
+    let mut stats = LogStats::new();
+
+    for line_result in reader.lines() {
+        let line = line_result?;
+        stats.process_line(&line);
+    }
+
+    Ok(stats)
+}
+
+// A streaming version that reuses one String buffer for all lines.
+// This avoids allocating a fresh String for every line.
+pub fn process_log_file_streaming_reuse_buffer(file_path: &str) -> io::Result<LogStats> {
     let file = File::open(file_path)?;
     let mut reader = BufReader::new(file);
 
@@ -81,7 +99,37 @@ pub fn process_log_file_streaming(file_path: &str) -> io::Result<LogStats> {
     }
 
     Ok(stats)
+}
 
+pub fn process_logs_with_shared_mutex (lines: &[String], thread_count: usize) -> LogStats {
+
+    if lines.is_empty() {
+        return LogStats::new();
+    }
+
+    let thread_count = thread_count.max(1);
+    let chunk_size = lines.len().div_ceil(thread_count);
+    let shared_stats = Arc::new(Mutex::new(LogStats::new()));
+
+    thread::scope(|scope| {
+        for chunk in lines.chunks(chunk_size) {
+            let shared_stats = Arc::clone(&shared_stats);
+
+            scope.spawn(move || {
+                let mut local_stats = LogStats::new();
+
+                for line in chunk {
+                    local_stats.process_line(line);
+                }
+
+                let mut stats = shared_stats.lock().expect("Failed to lock mutex");
+                stats.merge(&local_stats);
+            });
+        }
+    });
+
+    let stats = shared_stats.lock().expect("Mutex poisoned");
+    stats.clone()
 }
 
 #[cfg(test)]
