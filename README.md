@@ -1,16 +1,11 @@
 # Multi-threaded Log Processor
 
-A Rust learning project for practicing practical concurrency, log processing, and
-benchmarking trade-offs.
+A Rust learning project for practicing practical concurrency, log processing,
+streaming input, shared state, and benchmarking trade-offs.
 
-The project compares different ways to process a log file:
+This is the Phase 1B project in the Rust foundations track.
 
-- single-threaded processing over already-loaded lines
-- multi-threaded processing with scoped worker threads
-- streaming file processing with `BufReader`
-
-The goal is not only to make the fastest version, but to understand when each
-approach is useful.
+Phase 1B core is complete. Remaining work is optional experimentation.
 
 ## What It Does
 
@@ -38,6 +33,19 @@ DEBUG previous ERROR seen  -> counts as unknown, but total_lines still increment
 This avoids false positives from searching for `ERROR`, `WARN`, or `INFO`
 anywhere in the line.
 
+## Processing Strategies
+
+The project compares several approaches:
+
+- single-threaded processing over already-loaded lines
+- channel-based multi-threaded processing with scoped worker threads
+- shared-state multi-threaded processing with `Arc<Mutex<LogStats>>`
+- streaming file processing with `BufReader::lines()`
+- streaming file processing with `read_line(&mut line)` and a reusable buffer
+
+The goal is not only to make the fastest version, but to understand when each
+approach is useful.
+
 ## Project Structure
 
 ```text
@@ -57,7 +65,7 @@ Coordinates the program:
 
 - reads `logs.txt`
 - prepares lines for the existing processors
-- measures execution time with `Instant`
+- measures read/collect time separately from process-only time
 - prints stats for each processing approach
 
 ### `src/log_stats.rs`
@@ -86,20 +94,14 @@ It also contains:
 Contains the processing strategies:
 
 - single-threaded processing
-- multi-threaded chunk processing
-- streaming processing with `BufReader`
+- channel-based multi-threaded chunk processing
+- shared-mutex multi-threaded chunk processing
+- simple streaming with `BufReader::lines()`
+- optimized streaming with a reusable `String` buffer
 
-The multi-threaded version uses:
+## Architecture
 
-- `std::thread::scope`
-- borrowed `&[String]` chunks
-- `std::sync::mpsc`
-- local worker stats
-- final merge on the main thread
-
-## Current Architecture
-
-High-level flow:
+Read and collect flow:
 
 ```text
 logs.txt
@@ -108,19 +110,51 @@ fs::read_to_string()
     |
 logs.lines().map(String::from).collect::<Vec<String>>()
     |
-single-threaded baseline over &lines
+measure read + collect time
+```
+
+Single-threaded flow:
+
+```text
+Vec<String>
     |
-multi-threaded processing over &lines
+process_logs_singlethreaded(&lines)
     |
-lines.chunks(chunk_size)
+final LogStats
+```
+
+Channel-based multi-threaded flow:
+
+```text
+Vec<String>
+    |
+split into chunks
     |
 scoped worker threads borrow &[String] chunks
     |
-workers send LogStats through mpsc::Sender
+each worker builds local LogStats
+    |
+worker sends LogStats through mpsc::Sender
     |
 main receives from mpsc::Receiver
     |
-final_stats.merge(local_stats)
+main merges worker stats
+```
+
+Shared-mutex multi-threaded flow:
+
+```text
+Vec<String>
+    |
+split into chunks
+    |
+scoped worker threads borrow &[String] chunks
+    |
+each worker builds local LogStats
+    |
+worker locks Arc<Mutex<LogStats>> once
+    |
+worker merges local stats into shared stats
 ```
 
 Streaming flow:
@@ -132,7 +166,8 @@ File::open()
     |
 BufReader::new(file)
     |
-read one line at a time
+read one line at a time with .lines()
+or reuse one String with read_line(&mut line)
     |
 process line immediately
     |
@@ -176,12 +211,20 @@ cargo clippy
 Example benchmark output:
 
 ```text
-Single-threaded:
+Read + Collect:
+Log lines loaded: 184512
+Execution time: 30.615203ms
+
+Single-threaded Process Only:
 Total lines processed: 184512
 ERROR count: 46128
 WARNING count: 46128
 INFO count: 92256
-Execution time: 91.802817ms
+Execution time: 85.790197ms
+
+Read + Collect + Single-threaded Process:
+Total lines processed: 184512
+Execution time: 116.4054ms
 
 Processing 184512 log lines with 12 workers
 Multi Threaded Log Analysis:
@@ -189,27 +232,41 @@ Total lines processed: 184512
 ERROR count: 46128
 WARNING count: 46128
 INFO count: 92256
-Log level counts: {"ERROR": 46128, "INFO": 92256, "WARNING": 46128}
-Execution time: 21.837884ms
+Log level counts: {"INFO": 92256, "ERROR": 46128, "WARNING": 46128}
+Process-only execution time: 17.627876ms
+Read + Collect + Multi-threaded Process: 48.243079ms
 
-Streaming Log Analysis:
+Shared Mutex Log Analysis:
 Total lines processed: 184512
 ERROR count: 46128
 WARNING count: 46128
 INFO count: 92256
 Log level counts: {"ERROR": 46128, "INFO": 92256, "WARNING": 46128}
-Execution time: 149.899483ms
+Process-only execution time: 20.854808ms
+Read + Collect + Shared Mutex Process: 51.470011ms
+
+Streaming Log Analysis With BufReader::lines:
+Total lines processed: 184512
+ERROR count: 46128
+WARNING count: 46128
+INFO count: 92256
+Log level counts: {"INFO": 92256, "WARNING": 46128, "ERROR": 46128}
+Execution time: 124.010925ms
+
+Streaming Log Analysis With Reusable Buffer:
+Total lines processed: 184512
+ERROR count: 46128
+WARNING count: 46128
+INFO count: 92256
+Log level counts: {"INFO": 92256, "WARNING": 46128, "ERROR": 46128}
+Execution time: 119.533088ms
 ```
 
-## Benchmarking Lesson
+## Benchmarking Lessons
 
-The streaming version may look slower at first.
+Benchmarking has to compare the same amount of work.
 
-That does not mean `BufReader` is bad.
-
-The important detail is what each timer includes.
-
-If the single-threaded timer starts after:
+If the single-threaded timer starts after this work:
 
 ```rust
 let logs = fs::read_to_string("logs.txt").expect("Failed to read log file");
@@ -218,7 +275,7 @@ let lines: Vec<String> = logs.lines().map(|line| line.to_string()).collect();
 
 then it only measures processing already-loaded memory.
 
-But the streaming version measures:
+But streaming measures:
 
 ```text
 file I/O + line reading + processing
@@ -236,8 +293,67 @@ against:
 BufReader stream + process
 ```
 
+In this project, the fairer comparison showed:
+
+```text
+read + collect + channel multi-threaded  -> fastest current full path
+read + collect + shared mutex            -> slightly slower, but close
+reusable-buffer streaming                -> better than simple .lines() streaming
+read + collect + single-threaded         -> slower than both threaded versions
+```
+
 Streaming is mainly useful because it keeps memory usage low for large files.
 It is not guaranteed to beat processing data that is already loaded in memory.
+
+## `Arc<Mutex<LogStats>>` Lesson
+
+The shared-mutex version teaches safe shared mutable state across threads.
+
+Definitions:
+
+- `Arc<T>` means atomic reference counting.
+- `Arc<T>` lets multiple threads share ownership of the same value.
+- `Mutex<T>` means mutual exclusion.
+- `Mutex<T>` allows only one thread at a time to mutate protected data.
+- `Arc<Mutex<T>>` lets many threads own the same protected value safely.
+
+This project uses:
+
+```rust
+Arc<Mutex<LogStats>>
+```
+
+The good version does not lock for every line.
+
+Instead:
+
+```text
+worker processes chunk locally
+    |
+worker creates local LogStats
+    |
+worker locks shared stats once
+    |
+worker merges local stats
+```
+
+That is much better than:
+
+```text
+for every line:
+    lock shared stats
+    process line
+    unlock shared stats
+```
+
+The general rule:
+
+```text
+do expensive work locally
+lock shared state briefly
+apply final update
+unlock quickly
+```
 
 ## Rust Concepts Practiced
 
@@ -251,8 +367,12 @@ It is not guaranteed to beat processing data that is already loaded in memory.
 - scoped threads with `std::thread::scope`
 - message passing with `std::sync::mpsc`
 - local worker state and final merging
+- shared ownership with `Arc<T>`
+- shared mutation with `Mutex<T>`
+- lock granularity
 - avoiding unnecessary `String` cloning
 - streaming input with `File`, `BufReader`, and `BufRead`
+- fair benchmark design
 
 ## Tests
 
@@ -278,16 +398,33 @@ Run:
 cargo test
 ```
 
-## Next Steps
+## Phase 1B Status
 
-Recommended next learning steps:
+Phase 1B core is complete.
 
-1. Compare `BufReader + lines()` with `BufReader + read_line()` using a reusable buffer.
-2. Make benchmarks fair by timing `read_to_string + collect + process` together.
-3. Add CLI arguments for log file path and worker count.
-4. Implement an `Arc<Mutex<LogStats>>` version to learn shared mutable state.
-5. Compare channel-based local stats with lock-based shared stats.
-6. Build a small thread pool so workers are reused instead of spawned every run.
+Completed learning goals:
+
+- single-threaded baseline
+- channel-based multi-threading
+- scoped threads
+- borrowed chunk processing
+- `mpsc` message passing
+- `Arc<Mutex<LogStats>>` shared state
+- fair benchmarking
+- streaming with `BufReader`
+- reusable-buffer streaming
+
+Optional follow-ups:
+
+1. Add an intentionally slow mutex-per-line version to show lock overhead.
+2. Add tests for `process_logs_with_shared_mutex`.
+3. Implement streaming multi-threaded batch processing.
+4. Build a basic thread pool so workers are reused instead of spawned every run.
+5. Add CLI arguments for log file path and worker count.
+
+Recommended next project:
+
+Move to Phase 1C: `web_crawler`.
 
 ## Learning Note
 
@@ -300,6 +437,7 @@ It adds overhead:
 - sending messages
 - receiving messages
 - merging results
+- locking shared state
 
 For small workloads, single-threaded code can win. For larger workloads,
 multi-threading can help when the work is heavy enough to justify the overhead.
