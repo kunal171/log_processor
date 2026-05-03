@@ -2,8 +2,8 @@ use crate::log_stats::LogStats;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use std::sync::mpsc;
-use std::thread;
 use std::sync::{Arc, Mutex};
+use std::thread;
 
 pub fn process_logs_multithreaded(lines: &[String], thread_count: usize) -> LogStats {
     if lines.is_empty() {
@@ -101,8 +101,7 @@ pub fn process_log_file_streaming_reuse_buffer(file_path: &str) -> io::Result<Lo
     Ok(stats)
 }
 
-pub fn process_logs_with_shared_mutex (lines: &[String], thread_count: usize) -> LogStats {
-
+pub fn process_logs_with_shared_mutex(lines: &[String], thread_count: usize) -> LogStats {
     if lines.is_empty() {
         return LogStats::new();
     }
